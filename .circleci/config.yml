@@ -1,63 +1,14 @@
 version: 2.1
 jobs:
-  account-service:
-    docker:
-      - image: spuyo/account-service:v1
-      - run:
-          name: Hello
-          command: echo "Hello spuyo - I am running the account-service" && ls
-  customer-service:
-    docker:
-      - image: spuyo/customer-service:v1
-      - run:
-          name: Hello
-          command: echo "Hello spuyo - I am running the customer-service" && ls      
   discovery-service:
     docker:
-      - image: spuyo/discovery-service:v1
+      - image: spuyo/discovery-service
     steps:
       - checkout
       - run:
           name: Hello
           command: echo "Hello spuyo - I am running the discovery-service" && ls
-  gateway-service:
-    docker:
-      - image: spuyo/gateway-service:v1
-      - run:
-          name: Hello
-          command: echo "Hello spuyo - I am running the gateway-service" && ls        
-  zipkin-service:
-    docker:
-      - image: spuyo/zipkin-service:v1
-      - run:
-          name: Hello
-          command: echo "Hello spuyo - I am running the zipkin-service" && ls         
 workflows:
-  build-and-deploy:
+  spuyo:
     jobs:
-      - account-service
-      - customer-service
       - discovery-service
-      - gateway-service
-      - zipkin-service  
-      - aws-ecr/build_and_push_image:
-          account-url: "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
-          repo: "${AWS_RESOURCE_NAME_PREFIX}"
-          region: ${AWS_DEFAULT_REGION}
-          tag: "${CIRCLE_SHA1}"
-      - aws-ecs/deploy-service-update:
-          requires:
-            - aws-ecr/build_and_push_image
-          aws-region: ${AWS_DEFAULT_REGION}
-          family: "${AWS_RESOURCE_NAME_PREFIX}-service"
-          cluster-name: "${AWS_RESOURCE_NAME_PREFIX}-cluster"
-          container-image-name-updates: "container=${AWS_RESOURCE_NAME_PREFIX}-service,image-and-tag=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${AWS_RESOURCE_NAME_PREFIX}:${CIRCLE_SHA1}"
-          verify-revision-is-deployed: true
-          post-steps:
-            - run:
-                name: Test the deployment
-                command: |
-                  TARGET_GROUP_ARN=$(aws ecs describe-services --cluster ${AWS_RESOURCE_NAME_PREFIX}-cluster --services ${AWS_RESOURCE_NAME_PREFIX}-service | jq -r '.services[0].loadBalancers[0].targetGroupArn')
-                  ELB_ARN=$(aws elbv2 describe-target-groups --target-group-arns $TARGET_GROUP_ARN | jq -r '.TargetGroups[0].LoadBalancerArns[0]')
-                  ELB_DNS_NAME=$(aws elbv2 describe-load-balancers --load-balancer-arns $ELB_ARN | jq -r '.LoadBalancers[0].DNSName')
-                  curl -s --retry 10 http://$ELB_DNS_NAME | grep "Welcome to nginx!"
